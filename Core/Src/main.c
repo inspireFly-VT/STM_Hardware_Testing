@@ -52,7 +52,7 @@ PCD_HandleTypeDef hpcd_USB_OTG_FS;
 
 /* USER CODE BEGIN PV */
 /* USER CODE END PV */
-
+//COOOL CODE
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
@@ -115,10 +115,15 @@ int main(void)
   {
     /* USER CODE END WHILE */
 
-
-
-
-
+	  HAL_Delay(300);  // because (1/32000)*128*100 so max ~400ms
+	  HAL_GPIO_TogglePin(LD3_GPIO_Port, LD3_Pin);
+	  if (HAL_IWDG_Refresh(&hiwdg) != HAL_OK)
+	  {
+		  Error_Handler();
+	  }
+	  // this is suhani
+	  printf("Hello world!! %d \n\r", count);
+	  count = count + 1;
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
