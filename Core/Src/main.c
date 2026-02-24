@@ -63,6 +63,8 @@ uint32_t            txMailbox;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
+void CAN_SendArray(uint8_t *data, uint16_t length);
+void CAN_Send(uint8_t *data, uint8_t len);
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_LPUART1_UART_Init(void);
@@ -141,6 +143,11 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+  uint8_t myData[32];
+
+  for(int i=0;i<32;i++)
+      myData[i]=i;
+
   while (1)
   {
     /* USER CODE END WHILE */
@@ -150,17 +157,21 @@ int main(void)
 	  if (HAL_GetTick() - lastTick > 1000)   // every 1 second
 	  {
 	      lastTick = HAL_GetTick();
-
-	      canTX[0] = 0xDE;
-	      canTX[1] = 0xAD;
-	      canTX[2] = 0xBE;
-	      canTX[3] = 0xEF;
-	      canTX[4] = 0x01;
-	      canTX[5] = 0x02;
-	      canTX[6] = 0x03;
-	      canTX[7] = 0x04;
-
-	      CAN_Send(canTX, 8);
+	      CAN_SendArray(myData, 32);
+//	      uint8_t packets[4][8] =
+//	         {
+//	             {0x10,0,0,0,0,0,0,1},
+//	             {0x20,0,0,0,0,0,0,2},
+//	             {0x30,0,0,0,0,0,0,3},
+//	             {0x40,0,0,0,0,0,0,4}
+//	         };
+//
+//	         for (int i = 0; i < 4; i++)
+//	         {
+//	             txHeader.StdId = 0x120 + i;
+//	             CAN_Send(packets[i], 8);
+//	             HAL_Delay(5);
+//	         }
 	  }
 
     /* USER CODE BEGIN 3 */
@@ -539,6 +550,25 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
 
             printf("\r\n");
         }
+}
+
+void CAN_SendArray(uint8_t *data, uint16_t length)
+{
+    uint16_t index = 0;
+    uint8_t packet[8];
+
+    while (index < length)
+    {
+        uint8_t chunk = (length - index > 8) ? 8 : length - index;
+
+        memcpy(packet, &data[index], chunk);
+
+        CAN_Send(packet, chunk);
+
+        index += chunk;
+
+        HAL_Delay(2);
+    }
 }
 
 void CAN_Send(uint8_t *data, uint8_t len)
