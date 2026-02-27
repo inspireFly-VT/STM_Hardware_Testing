@@ -51,11 +51,20 @@ RTC_HandleTypeDef hrtc;
 PCD_HandleTypeDef hpcd_USB_OTG_FS;
 
 /* USER CODE BEGIN PV */
+/* USER CODE BEGIN PV */
+CAN_FilterTypeDef   canfil;
 CAN_RxHeaderTypeDef rxHeader;
-uint8_t canRX[8];
+uint8_t             canRX[8];
+CAN_TxHeaderTypeDef txHeader;
+uint8_t             canTX[8];
+uint32_t            txMailbox;
 /* USER CODE END PV */
-//COOOL CODE
+
+/* USER CODE END PV */
+
 /* Private function prototypes -----------------------------------------------*/
+void CAN_SendArray(uint8_t *data, uint16_t length);
+void CAN_Send(uint8_t *data, uint8_t len);
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_LPUART1_UART_Init(void);
@@ -69,11 +78,7 @@ static void MX_CAN1_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan1)
-{
-	HAL_CAN_GetRxMessage(hcan1, CAN_RX_FIFO0, &rxHeader, canRX); //Receive CAN bus message to canRX buffer
-	HAL_GPIO_TogglePin(GPIOB, LD3_Pin);
-}
+
 /* USER CODE END 0 */
 
 /**
@@ -84,11 +89,14 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
+<<<<<<< HEAD
 	CAN_RxHeaderTypeDef rxHeader;    // CAN receive header
 	CAN_TxHeaderTypeDef txHeader;    // CAN transmit header
 	uint8_t csend[8] = {1,2,3,4,5,6,7,8}; // CAN TX buffer
 	CAN_FilterTypeDef canfil;        // CAN filter
 	uint32_t canMailbox;
+=======
+>>>>>>> 9c9152ca8066ff916970b9b4e454411e5dc2bad5
 
   /* USER CODE END 1 */
 
@@ -117,44 +125,63 @@ int main(void)
   MX_CAN1_Init();
   /* USER CODE BEGIN 2 */
   canfil.FilterBank = 0;
-    canfil.FilterMode = CAN_FILTERMODE_IDMASK;
-    canfil.FilterFIFOAssignment = CAN_RX_FIFO0;
-    canfil.FilterIdHigh = 0;
-    canfil.FilterIdLow = 0;
-    canfil.FilterMaskIdHigh = 0;
-    canfil.FilterMaskIdLow = 0;
-    canfil.FilterScale = CAN_FILTERSCALE_32BIT;
-    canfil.FilterActivation = ENABLE;
-    canfil.SlaveStartFilterBank = 14;
-  /* USER CODE END 2 */
-  txHeader.DLC = 8; // Number of bites to be transmitted max- 8
-  txHeader.IDE = CAN_ID_STD;
-  txHeader.RTR = CAN_RTR_DATA;
-  txHeader.StdId = 0x030;
-  txHeader.TransmitGlobalTime = DISABLE;
-  HAL_CAN_ConfigFilter(&hcan1, &canfil);
+  canfil.FilterMode = CAN_FILTERMODE_IDMASK;
+  canfil.FilterFIFOAssignment = CAN_RX_FIFO0;
+  canfil.FilterIdHigh = 0;
+  canfil.FilterIdLow = 0;
+  canfil.FilterMaskIdHigh = 0;
+  canfil.FilterMaskIdLow = 0;
+  canfil.FilterScale = CAN_FILTERSCALE_32BIT;
+  canfil.FilterActivation = ENABLE;
+  canfil.SlaveStartFilterBank = 14;
+
+  HAL_CAN_ConfigFilter(&hcan1,&canfil);
   HAL_CAN_Start(&hcan1);
-  HAL_CAN_ActivateNotification(&hcan1, CAN_IT_RX_FIFO0_MSG_PENDING);
-  HAL_CAN_AddTxMessage(&hcan1, &txHeader, csend, &canMailbox);
+  HAL_CAN_ActivateNotification(&hcan1,CAN_IT_RX_FIFO0_MSG_PENDING);
+
+  /* USER CODE BEGIN CAN_TX_INIT */
+  txHeader.StdId = 0x123;              // CAN ID you want
+  txHeader.ExtId = 0;                  // unused for standard ID
+  txHeader.IDE   = CAN_ID_STD;         // standard frame
+  txHeader.RTR   = CAN_RTR_DATA;       // data frame
+  txHeader.DLC   = 8;                  // 0–8 bytes
+  txHeader.TransmitGlobalTime = DISABLE;
+  /* USER CODE END CAN_TX_INIT */
+  /* USER CODE END 2 */
+
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  int count = 1;
+  uint8_t myData[32];
+
+  for(int i=0;i<32;i++)
+      myData[i]=i;
+
   while (1)
   {
     /* USER CODE END WHILE */
+	  //HAL_Delay(500);
+	  static uint32_t lastTick = 0;
 
-	  HAL_Delay(300);  // because (1/32000)*128*100 so max ~400ms
-	  HAL_GPIO_TogglePin(LD3_GPIO_Port, LD3_Pin);
-	  if (HAL_IWDG_Refresh(&hiwdg) != HAL_OK)
+	  if (HAL_GetTick() - lastTick > 1000)   // every 1 second
 	  {
-		  Error_Handler();
+	      lastTick = HAL_GetTick();
+	      CAN_SendArray(myData, 32);
+//	      uint8_t packets[4][8] =
+//	         {
+//	             {0x10,0,0,0,0,0,0,1},
+//	             {0x20,0,0,0,0,0,0,2},
+//	             {0x30,0,0,0,0,0,0,3},
+//	             {0x40,0,0,0,0,0,0,4}
+//	         };
+//
+//	         for (int i = 0; i < 4; i++)
+//	         {
+//	             txHeader.StdId = 0x120 + i;
+//	             CAN_Send(packets[i], 8);
+//	             HAL_Delay(5);
+//	         }
 	  }
-	  // this is suhani
-	  printf("Hello world!! %d \n\r", count);
-	  count = count + 1;
 
-
-	  printf("%02X\n", canRX[0]);
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
@@ -238,17 +265,19 @@ static void MX_CAN1_Init(void)
 
   /* USER CODE END CAN1_Init 1 */
   hcan1.Instance = CAN1;
-  hcan1.Init.Prescaler = 16;
-  hcan1.Init.Mode = CAN_MODE_NORMAL;
-  hcan1.Init.SyncJumpWidth = CAN_SJW_1TQ;
-  hcan1.Init.Prescaler = 16;
+  hcan1.Init.Prescaler = 8;
   hcan1.Init.SyncJumpWidth = CAN_SJW_1TQ;
   hcan1.Init.TimeSeg1 = CAN_BS1_13TQ;
   hcan1.Init.TimeSeg2 = CAN_BS2_2TQ;
+  //hcan1.Init.Prescaler = 16;
+  hcan1.Init.Mode = CAN_MODE_NORMAL;
+  //hcan1.Init.SyncJumpWidth = CAN_SJW_1TQ;
+  //hcan1.Init.TimeSeg1 = CAN_BS1_1TQ;
+  //hcan1.Init.TimeSeg2 = CAN_BS2_1TQ;
   hcan1.Init.TimeTriggeredMode = DISABLE;
   hcan1.Init.AutoBusOff = DISABLE;
   hcan1.Init.AutoWakeUp = DISABLE;
-  hcan1.Init.AutoRetransmission = DISABLE;
+  hcan1.Init.AutoRetransmission = ENABLE;
   hcan1.Init.ReceiveFifoLocked = DISABLE;
   hcan1.Init.TransmitFifoPriority = DISABLE;
   if (HAL_CAN_Init(&hcan1) != HAL_OK)
@@ -509,9 +538,66 @@ void HAL_RTC_AlarmAEventCallback(RTC_HandleTypeDef *hrtc) {
   }else{
     sAlarm.AlarmTime.Seconds=sAlarm.AlarmTime.Seconds+1;
   }
-    while(HAL_RTC_SetAlarm_IT(hrtc, &sAlarm, FORMAT_BIN)!=HAL_OK){}
-    HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_7);
+//    while(HAL_RTC_SetAlarm_IT(hrtc, &sAlarm, FORMAT_BIN)!=HAL_OK){}
+//    HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_7);
 }
+
+void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
+{
+    if (HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &rxHeader, canRX) == HAL_OK)
+        {
+    		HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_3); // RX activity LED
+            printf("CAN RX | ID: 0x%03lX | DLC: %d | DATA:",
+                   rxHeader.StdId,
+                   rxHeader.DLC);
+
+            for (uint8_t i = 0; i < rxHeader.DLC; i++)
+            {
+                printf(" %02X", canRX[i]);
+            }
+
+            printf("\r\n");
+        }
+}
+
+void CAN_SendArray(uint8_t *data, uint16_t length)
+{
+    uint16_t index = 0;
+    uint8_t packet[8];
+
+    while (index < length)
+    {
+        uint8_t chunk = (length - index > 8) ? 8 : length - index;
+
+        memcpy(packet, &data[index], chunk);
+
+        CAN_Send(packet, chunk);
+
+        index += chunk;
+
+        HAL_Delay(2);
+    }
+}
+
+void CAN_Send(uint8_t *data, uint8_t len)
+{
+    if (len > 8) len = 8;
+    txHeader.DLC = len;
+
+    if (HAL_CAN_GetTxMailboxesFreeLevel(&hcan1) > 0)
+    {
+        if (HAL_CAN_AddTxMessage(&hcan1, &txHeader, data, &txMailbox) == HAL_OK)
+        {
+            printf("CAN TX | ID: 0x%03lX | DLC: %d\r\n",
+                   txHeader.StdId, txHeader.DLC);
+        }
+        else
+        {
+            printf("CAN TX ERROR\r\n");
+        }
+    }
+}
+
 /* USER CODE END 4 */
 
 /**
