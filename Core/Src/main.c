@@ -98,6 +98,11 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
+	CAN_RxHeaderTypeDef rxHeader;    // CAN receive header
+	CAN_TxHeaderTypeDef txHeader;    // CAN transmit header
+	uint8_t csend[8] = {1,2,3,4,5,6,7,8}; // CAN TX buffer
+	CAN_FilterTypeDef canfil;        // CAN filter
+	uint32_t canMailbox;
 
   /* USER CODE END 1 */
 
@@ -179,6 +184,22 @@ int main(void)
 	      {
 	    	  retries++;
 	      }
+
+        	      //CAN_SendArray(myData, 32);
+//	      uint8_t packets[4][8] =
+//	         {
+//	             {0x10,0,0,0,0,0,0,1},
+//	             {0x20,0,0,0,0,0,0,2},
+//	             {0x30,0,0,0,0,0,0,3},
+//	             {0x40,0,0,0,0,0,0,4}
+//	         };
+//
+//	         for (int i = 0; i < 4; i++)
+//	         {
+//	             txHeader.StdId = 0x120 + i;
+//	             CAN_Send(packets[i], 8);
+//	             HAL_Delay(5);
+//	         }
 
 	  }
 
@@ -557,6 +578,12 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
             }
 
             printf("\r\n");
+
+            if ((canRX[0] >> 4) == 1 || canRX[0] == 0x2F){
+            	//call a can frame function
+            	uint8_t packet[8] = {0x30, 0x0F, 0x0A, 0x00, 0x00, 0x00, 0x00, 0x00};
+            	CAN_Send(packet, sizeof(packet)/sizeof(packet[0]));
+            }
 
             if (canRX[0] >> 4 == 3)
             {
