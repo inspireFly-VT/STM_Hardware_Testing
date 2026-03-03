@@ -157,7 +157,7 @@ int main(void)
 	  if (HAL_GetTick() - lastTick > 1000)   // every 1 second
 	  {
 	      lastTick = HAL_GetTick();
-	      CAN_SendArray(myData, 32);
+	      //CAN_SendArray(myData, 32);
 //	      uint8_t packets[4][8] =
 //	         {
 //	             {0x10,0,0,0,0,0,0,1},
@@ -549,6 +549,12 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
             }
 
             printf("\r\n");
+
+            if ((canRX[0] >> 4) == 1 || canRX[0] == 0x2F){
+            	//call a can frame function
+            	uint8_t packet[8] = {0x30, 0x0F, 0x0A, 0x00, 0x00, 0x00, 0x00, 0x00};
+            	CAN_Send(packet, sizeof(packet)/sizeof(packet[0]));
+            }
         }
 }
 
