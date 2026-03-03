@@ -89,6 +89,14 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
+<<<<<<< HEAD
+	CAN_RxHeaderTypeDef rxHeader;    // CAN receive header
+	CAN_TxHeaderTypeDef txHeader;    // CAN transmit header
+	uint8_t csend[8] = {1,2,3,4,5,6,7,8}; // CAN TX buffer
+	CAN_FilterTypeDef canfil;        // CAN filter
+	uint32_t canMailbox;
+=======
+>>>>>>> 9c9152ca8066ff916970b9b4e454411e5dc2bad5
 
   /* USER CODE END 1 */
 
