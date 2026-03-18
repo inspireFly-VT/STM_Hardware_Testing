@@ -89,14 +89,13 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-<<<<<<< HEAD
+
 	CAN_RxHeaderTypeDef rxHeader;    // CAN receive header
 	CAN_TxHeaderTypeDef txHeader;    // CAN transmit header
 	uint8_t csend[8] = {1,2,3,4,5,6,7,8}; // CAN TX buffer
 	CAN_FilterTypeDef canfil;        // CAN filter
 	uint32_t canMailbox;
-=======
->>>>>>> 9c9152ca8066ff916970b9b4e454411e5dc2bad5
+
 
   /* USER CODE END 1 */
 
@@ -174,7 +173,7 @@ int main(void)
 //	             {0x40,0,0,0,0,0,0,4}
 //	         };
 //
-//	         for (int i = 0; i < 4; i++)
+//	         for (uint8_t i = 0; i < 4; i++)
 //	         {
 //	             txHeader.StdId = 0x120 + i;
 //	             CAN_Send(packets[i], 8);
@@ -588,6 +587,7 @@ void CAN_Send(uint8_t *data, uint8_t len)
     {
         if (HAL_CAN_AddTxMessage(&hcan1, &txHeader, data, &txMailbox) == HAL_OK)
         {
+        	txHeader.StdId = 0x111;
             printf("CAN TX | ID: 0x%03lX | DLC: %d\r\n",
                    txHeader.StdId, txHeader.DLC);
         }
