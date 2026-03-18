@@ -649,10 +649,11 @@ void CAN_SendSFFF(uint8_t *data, uint16_t length)
 	}
 
 	// First Frame (FF): length must fit in 12 bits for classic ISO-TP normal addressing
-	if (length > 4095)
-	{
-	    // handle error: too long for classic FF format
-	    return;
+	if (length>4095){
+		// ERROR: Above the first frame memory limit, return an handle error
+		PQState = -1; // code for not actively sending out data
+		return;
+
 	}
 
 	// PCI: First Frame + 12-bit length
@@ -688,7 +689,8 @@ void CAN_SendCF()
 	uint8_t frameWait = canRX[2]; // Note this is technically incorrect ISO-TP, but okay for 10ms standard delay
 
 	uint8_t sn = 1;
-	for (uint8_t i = 0; i < numFrames; i++)
+
+	for (uint8_t i = 0; i <= numFrames; i++) //  changed loop so data is sent when numframes is not equal to 0
 	{
 		uint8_t packet[8] = {0};
 
@@ -706,6 +708,9 @@ void CAN_SendCF()
 		CAN_Send(packet, 8);
 
 		HAL_Delay(frameWait);
+		if (dataIndex >= myDataLength){
+			break;
+		}
 	}
 
 
