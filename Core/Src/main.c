@@ -58,6 +58,15 @@ uint8_t             canRX[8];
 CAN_TxHeaderTypeDef txHeader;
 uint8_t             canTX[8];
 uint32_t            txMailbox;
+
+uint8_t             PQState;
+uint8_t             myData[0xFF];
+uint16_t			myDataLength;
+uint16_t            dataIndex;
+// State definitions:
+// 0 : idle
+// 3 : currently sending multi-frame data, awaiting CF
+
 /* USER CODE END PV */
 
 /* USER CODE END PV */
@@ -89,6 +98,7 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
+
 
 	CAN_RxHeaderTypeDef rxHeader;    // CAN receive header
 	CAN_TxHeaderTypeDef txHeader;    // CAN transmit header
@@ -150,10 +160,13 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  uint8_t myData[32];
-
-  for(int i=0;i<32;i++)
+  PQState = 0;
+  for(int i=0;i<64;i++)
       myData[i]=i;
+  myDataLength = 64;
+  dataIndex = 0;
+
+  uint8_t retries = 0;
 
   while (1)
   {
@@ -164,7 +177,18 @@ int main(void)
 	  if (HAL_GetTick() - lastTick > 1000)   // every 1 second
 	  {
 	      lastTick = HAL_GetTick();
-	      CAN_SendArray(myData, 32);
+	      // Send data if not sending
+	      if (PQState == 0 && retries < 10)
+	      {
+	    	  retries = 0;
+	    	  CAN_SendSFFF(myData, 64);
+	      }
+	      else
+	      {
+	    	  retries++;
+	      }
+
+        	      //CAN_SendArray(myData, 32);
 //	      uint8_t packets[4][8] =
 //	         {
 //	             {0x10,0,0,0,0,0,0,1},
@@ -179,6 +203,7 @@ int main(void)
 //	             CAN_Send(packets[i], 8);
 //	             HAL_Delay(5);
 //	         }
+
 	  }
 
     /* USER CODE BEGIN 3 */
@@ -556,8 +581,40 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
             }
 
             printf("\r\n");
+
+            if ((canRX[0] >> 4) == 1 || canRX[0] == 0x2F){
+            	//call a can frame function
+            	uint8_t packet[8] = {0x30, 0x0F, 0x0A, 0x00, 0x00, 0x00, 0x00, 0x00};
+            	CAN_Send(packet, sizeof(packet)/sizeof(packet[0]));
+            }
+
+            if (canRX[0] >> 4 == 3)
+            {
+            	CAN_SendCF();
+            }
         }
 }
+
+
+void CAN_Send(uint8_t *data, uint8_t len)
+{
+    if (len > 8) len = 8;
+    txHeader.DLC = len;
+
+    if (HAL_CAN_GetTxMailboxesFreeLevel(&hcan1) > 0)
+    {
+        if (HAL_CAN_AddTxMessage(&hcan1, &txHeader, data, &txMailbox) == HAL_OK)
+        {
+            printf("CAN TX | ID: 0x%03lX | DLC: %d\r\n",
+                   txHeader.StdId, txHeader.DLC);
+        }
+        else
+        {
+            printf("CAN TX ERROR\r\n");
+        }
+    }
+}
+
 
 void CAN_SendArray(uint8_t *data, uint16_t length)
 {
@@ -578,10 +635,6 @@ void CAN_SendArray(uint8_t *data, uint16_t length)
     }
 }
 
-void CAN_Send(uint8_t *data, uint8_t len)
-{
-    if (len > 8) len = 8;
-    txHeader.DLC = len;
 
     if (HAL_CAN_GetTxMailboxesFreeLevel(&hcan1) > 0)
     {
@@ -596,7 +649,87 @@ void CAN_Send(uint8_t *data, uint8_t len)
             printf("CAN TX ERROR\r\n");
         }
     }
+
+void CAN_SendSFFF(uint8_t *data, uint16_t length)
+{
+	txHeader.StdId = 0x210;
+	uint8_t packet[8] = {0};
+	dataIndex = 0;
+
+	// Single Frame (SF): up to 7 bytes payload
+	if (length <= 7)
+	{
+	    packet[0] = (0x0u << 4) | (uint8_t)(length & 0x0Fu);
+	    memcpy(&packet[1], data, length);
+	    CAN_Send(packet, 8);   // send full 8 bytes for consistent logging
+	    return;
+	}
+
+	// First Frame (FF): length must fit in 12 bits for classic ISO-TP normal addressing
+	if (length > 4095)
+	{
+	    // handle error: too long for classic FF format
+	    return;
+	}
+
+	// PCI: First Frame + 12-bit length
+	packet[0] = (0x1u << 4) | (uint8_t)((length >> 8) & 0x0Fu);
+    packet[1] = (uint8_t)(length & 0xFFu);
+
+    // First 6 data bytes go in bytes 2..7
+	memcpy(&packet[2], &data[0], 6);
+
+	CAN_Send(packet, 8);
+	PQState = 3; // Code for actively sending data
+	// IMPORTANT: Do NOT send CFs yet.
+	// Wait for FC from receiver; when FC arrives you’ll start streaming CF frames.
+
 }
+
+void CAN_SendCF()
+{
+	if ((canRX[0] & 0xF0) != 0x30) return; // not Flow Control
+	// Determine 0=continue, 1=wait, 2=abort
+	uint8_t pcl = canRX[0] & 0x0F;
+	if (pcl == 1)
+	{
+		return;
+	}
+	else if (pcl != 0)
+	{
+		PQState = 0; // Abort data send process
+		return;
+	}
+	// If here, should continue sending bytes!
+	// Parse send parameters
+	uint8_t numFrames = canRX[1];
+	uint8_t frameWait = canRX[2]; // Note this is technically incorrect ISO-TP, but okay for 10ms standard delay
+
+	uint8_t sn = 1;
+	for (uint8_t i = 0; i < numFrames; i++)
+	{
+		uint8_t packet[8] = {0};
+
+		// PCI: 2 then index
+		packet[0] = (0x2u << 4) | sn;
+		sn = (sn + 1) & 0x0F;
+		if (sn == 0) sn = 1;
+
+		// Next data bytes
+		uint16_t numRemaining = myDataLength - dataIndex;
+		uint8_t numSend = numRemaining > 7 ? 7 : numRemaining;
+		memcpy(&packet[1], &myData[dataIndex], numSend);
+		dataIndex += numSend; // increment data index
+
+		CAN_Send(packet, 8);
+
+		HAL_Delay(frameWait);
+	}
+
+
+
+}
+
 
 /* USER CODE END 4 */
 
