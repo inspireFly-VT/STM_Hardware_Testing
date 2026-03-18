@@ -98,14 +98,11 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-
-
 	CAN_RxHeaderTypeDef rxHeader;    // CAN receive header
 	CAN_TxHeaderTypeDef txHeader;    // CAN transmit header
 	uint8_t csend[8] = {1,2,3,4,5,6,7,8}; // CAN TX buffer
 	CAN_FilterTypeDef canfil;        // CAN filter
 	uint32_t canMailbox;
-
 
   /* USER CODE END 1 */
 
@@ -197,7 +194,7 @@ int main(void)
 //	             {0x40,0,0,0,0,0,0,4}
 //	         };
 //
-//	         for (uint8_t i = 0; i < 4; i++)
+//	         for (int i = 0; i < 4; i++)
 //	         {
 //	             txHeader.StdId = 0x120 + i;
 //	             CAN_Send(packets[i], 8);
@@ -636,20 +633,6 @@ void CAN_SendArray(uint8_t *data, uint16_t length)
 }
 
 
-    if (HAL_CAN_GetTxMailboxesFreeLevel(&hcan1) > 0)
-    {
-        if (HAL_CAN_AddTxMessage(&hcan1, &txHeader, data, &txMailbox) == HAL_OK)
-        {
-        	txHeader.StdId = 0x111;
-            printf("CAN TX | ID: 0x%03lX | DLC: %d\r\n",
-                   txHeader.StdId, txHeader.DLC);
-        }
-        else
-        {
-            printf("CAN TX ERROR\r\n");
-        }
-    }
-
 void CAN_SendSFFF(uint8_t *data, uint16_t length)
 {
 	txHeader.StdId = 0x210;
@@ -683,7 +666,6 @@ void CAN_SendSFFF(uint8_t *data, uint16_t length)
 	PQState = 3; // Code for actively sending data
 	// IMPORTANT: Do NOT send CFs yet.
 	// Wait for FC from receiver; when FC arrives you’ll start streaming CF frames.
-
 }
 
 void CAN_SendCF()
