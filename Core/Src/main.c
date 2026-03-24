@@ -73,7 +73,7 @@ uint16_t            dataIndex;
 
 /* Private function prototypes -----------------------------------------------*/
 void CAN_SendArray(uint8_t *data, uint16_t length);
-void CAN_Send(uint8_t *data, uint8_t len);
+uint8_t CAN_Send(uint8_t *data, uint8_t len);
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_LPUART1_UART_Init(void);
@@ -164,8 +164,8 @@ int main(void)
   dataIndex = 0;
 
   uint8_t retries = 0;
-
-  while (1)
+  CAN_SendSFFF(myData, 64);
+  while (0 < 1)
   {
     /* USER CODE END WHILE */
 	  //HAL_Delay(500);
@@ -175,10 +175,10 @@ int main(void)
 	  {
 	      lastTick = HAL_GetTick();
 	      // Send data if not sending
-	      if (PQState == 0 && retries < 10)
+	      //CAN_SendSFFF(myData, 64);
+	      if (PQState == 0)
 	      {
-	    	  retries = 0;
-	    	  CAN_SendSFFF(myData, 64);
+
 	      }
 	      else
 	      {
@@ -579,13 +579,14 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
 
             printf("\r\n");
 
-            if ((canRX[0] >> 4) == 1 || canRX[0] == 0x2F){
+            if ((canRX[0] >> 4) == 1 || canRX[0] == 0x2F) // Should send control frame
+            {
             	//call a can frame function
             	uint8_t packet[8] = {0x30, 0x0F, 0x0A, 0x00, 0x00, 0x00, 0x00, 0x00};
             	CAN_Send(packet, sizeof(packet)/sizeof(packet[0]));
             }
 
-            if (canRX[0] >> 4 == 3)
+            if (canRX[0] >> 4 == 3) // Should send consecutive frame
             {
             	CAN_SendCF();
             }
@@ -593,11 +594,11 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
 }
 
 
-void CAN_Send(uint8_t *data, uint8_t len)
+uint8_t CAN_Send(uint8_t *data, uint8_t len)
 {
     if (len > 8) len = 8;
     txHeader.DLC = len;
-
+    printf("checking CAN TX mailboxes.\r\n");
     if (HAL_CAN_GetTxMailboxesFreeLevel(&hcan1) > 0)
     {
         if (HAL_CAN_AddTxMessage(&hcan1, &txHeader, data, &txMailbox) == HAL_OK)
@@ -609,7 +610,10 @@ void CAN_Send(uint8_t *data, uint8_t len)
         {
             printf("CAN TX ERROR\r\n");
         }
+        return 1;
     }
+    printf("CAN TX mailboxes full, failed to send data.\r\n");
+    return 0;
 }
 
 
@@ -661,6 +665,7 @@ void CAN_SendSFFF(uint8_t *data, uint16_t length)
 
     // First 6 data bytes go in bytes 2..7
 	memcpy(&packet[2], &data[0], 6);
+	dataIndex += 6;
 
 	CAN_Send(packet, 8);
 	PQState = 3; // Code for actively sending data
@@ -690,6 +695,7 @@ void CAN_SendCF()
 	uint8_t sn = 1;
 	for (uint8_t i = 0; i < numFrames; i++)
 	{
+		printf("sending frame %d\r\n", i);
 		uint8_t packet[8] = {0};
 
 		// PCI: 2 then index
@@ -705,7 +711,7 @@ void CAN_SendCF()
 
 		CAN_Send(packet, 8);
 
-		HAL_Delay(frameWait);
+		//HAL_Delay(10);
 	}
 
 
