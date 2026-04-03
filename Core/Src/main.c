@@ -59,21 +59,38 @@ CAN_TxHeaderTypeDef txHeader;
 uint8_t             canTX[8];
 uint32_t            txMailbox;
 
-uint8_t             PQState;
-uint8_t             myData[0xFF];
-uint16_t			myDataLength;
-uint16_t            dataIndex;
-// State definitions:
-// 0 : idle
-// 3 : currently sending multi-frame data, awaiting CF
+/*
+ * TXRXState codes/definitions:
+ * 0 - not sending/receiving anything
+ * 1 - transmitter state, sent FF, awaiting FC
+ * 2 - transmitter state, sending CFs
+ * 3 - receiver state
+ * 4 - message received, print on next main iteration then TXRXState=0
+ */
+uint8_t             TXRXState;
+uint8_t             myTXBuffer[128];
+uint16_t			myTXBufferLength;
+uint16_t            myTXBufferIndex;
+uint16_t			myTXDataLength;
+uint8_t             myRXBuffer[128];
+uint16_t			myRXBufferLength;
+uint16_t            myRXBufferIndex;
+uint16_t			myRXDataLength;
+uint16_t			myCFsExpected; // this is used as a collection of boolean bits
+uint16_t			myCFsReceived; // this is used as a collection of boolean bits
 
 /* USER CODE END PV */
 
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
-void CAN_SendArray(uint8_t *data, uint16_t length);
+void manageTXRXState(void);
 uint8_t CAN_Send(uint8_t *data, uint8_t len);
+void CAN_SendSFFF(uint8_t *data, uint16_t length);
+void CAN_SendCFs();
+void setCFsExpected(void);
+void routeRX(void);
+void CAN_SendArray(uint8_t *data, uint16_t length);
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_LPUART1_UART_Init(void);
@@ -97,115 +114,93 @@ static void MX_CAN1_Init(void);
 int main(void)
 {
 
-  /* USER CODE BEGIN 1 */
+	/* USER CODE BEGIN 1 */
 	CAN_RxHeaderTypeDef rxHeader;    // CAN receive header
 	CAN_TxHeaderTypeDef txHeader;    // CAN transmit header
 	uint8_t csend[8] = {1,2,3,4,5,6,7,8}; // CAN TX buffer
 	CAN_FilterTypeDef canfil;        // CAN filter
 	uint32_t canMailbox;
 
-  /* USER CODE END 1 */
+	/* USER CODE END 1 */
 
-  /* MCU Configuration--------------------------------------------------------*/
+	/* MCU Configuration--------------------------------------------------------*/
 
-  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-  HAL_Init();
+	/* Reset of all peripherals, Initializes the Flash interface and the Systick. */
+	HAL_Init();
 
-  /* USER CODE BEGIN Init */
+	/* USER CODE BEGIN Init */
 
-  /* USER CODE END Init */
+	/* USER CODE END Init */
 
-  /* Configure the system clock */
-  SystemClock_Config();
+	/* Configure the system clock */
+	SystemClock_Config();
 
-  /* USER CODE BEGIN SysInit */
+	/* USER CODE BEGIN SysInit */
 
-  /* USER CODE END SysInit */
+	/* USER CODE END SysInit */
 
-  /* Initialize all configured peripherals */
-  MX_GPIO_Init();
-  MX_LPUART1_UART_Init();
-  MX_USB_OTG_FS_PCD_Init();
-  MX_RTC_Init();
-  MX_IWDG_Init();
-  MX_CAN1_Init();
-  /* USER CODE BEGIN 2 */
-  canfil.FilterBank = 0;
-  canfil.FilterMode = CAN_FILTERMODE_IDMASK;
-  canfil.FilterFIFOAssignment = CAN_RX_FIFO0;
-  canfil.FilterIdHigh = 0;
-  canfil.FilterIdLow = 0;
-  canfil.FilterMaskIdHigh = 0;
-  canfil.FilterMaskIdLow = 0;
-  canfil.FilterScale = CAN_FILTERSCALE_32BIT;
-  canfil.FilterActivation = ENABLE;
-  canfil.SlaveStartFilterBank = 14;
+	/* Initialize all configured peripherals */
+	MX_GPIO_Init();
+	MX_LPUART1_UART_Init();
+	MX_USB_OTG_FS_PCD_Init();
+	MX_RTC_Init();
+	MX_IWDG_Init();
+	MX_CAN1_Init();
+	/* USER CODE BEGIN 2 */
+	canfil.FilterBank = 0;
+	canfil.FilterMode = CAN_FILTERMODE_IDMASK;
+	canfil.FilterFIFOAssignment = CAN_RX_FIFO0;
+	canfil.FilterIdHigh = 0;
+	canfil.FilterIdLow = 0;
+	canfil.FilterMaskIdHigh = 0;
+	canfil.FilterMaskIdLow = 0;
+	canfil.FilterScale = CAN_FILTERSCALE_32BIT;
+	canfil.FilterActivation = ENABLE;
+	canfil.SlaveStartFilterBank = 14;
 
-  HAL_CAN_ConfigFilter(&hcan1,&canfil);
-  HAL_CAN_Start(&hcan1);
-  HAL_CAN_ActivateNotification(&hcan1,CAN_IT_RX_FIFO0_MSG_PENDING);
+	HAL_CAN_ConfigFilter(&hcan1,&canfil);
+	HAL_CAN_Start(&hcan1);
+	HAL_CAN_ActivateNotification(&hcan1,CAN_IT_RX_FIFO0_MSG_PENDING);
 
-  /* USER CODE BEGIN CAN_TX_INIT */
-  txHeader.StdId = 0x123;              // CAN ID you want
-  txHeader.ExtId = 0;                  // unused for standard ID
-  txHeader.IDE   = CAN_ID_STD;         // standard frame
-  txHeader.RTR   = CAN_RTR_DATA;       // data frame
-  txHeader.DLC   = 8;                  // 0–8 bytes
-  txHeader.TransmitGlobalTime = DISABLE;
-  /* USER CODE END CAN_TX_INIT */
-  /* USER CODE END 2 */
+	/* USER CODE BEGIN CAN_TX_INIT */
+	txHeader.StdId = 0x123;              // CAN ID you want
+	txHeader.ExtId = 0;                  // unused for standard ID
+	txHeader.IDE   = CAN_ID_STD;         // standard frame
+	txHeader.RTR   = CAN_RTR_DATA;       // data frame
+	txHeader.DLC   = 8;                  // 0–8 bytes
+	txHeader.TransmitGlobalTime = DISABLE;
+	/* USER CODE END CAN_TX_INIT */
+	/* USER CODE END 2 */
 
-  /* Infinite loop */
-  /* USER CODE BEGIN WHILE */
-  PQState = 0;
-  for(int i=0;i<64;i++)
-      myData[i]=i;
-  myDataLength = 64;
-  dataIndex = 0;
+	/* Infinite loop */
+	/* USER CODE BEGIN WHILE */
 
-  uint8_t retries = 0;
-  CAN_SendSFFF(myData, 64);
-  while (0 < 1)
-  {
-    /* USER CODE END WHILE */
-	  //HAL_Delay(500);
-	  static uint32_t lastTick = 0;
+	// Initialize buffer details
+	myTXBufferLength = 128; // 128 chosen during initialization above
+	myRXBufferLength = 128; // 128 chosen during initialization above
+	myTXBufferIndex = 0;
+	myRXBufferIndex = 0;
+	myTXDataLength = 0;
+	myRXDataLength = 0;
+	myCFsExpected = 0;
+	myCFsReceived = 0;
+	// Setup state
+	txHeader.StdId = 0x210;
+	TXRXState = 0;
+	uint8_t retries = 0;
+	while (1)
+	{
+		/* USER CODE END WHILE */
+		static uint32_t lastTick = 0;
+		if (HAL_GetTick() - lastTick > 250) // every 250 ms
+		{
+			lastTick = HAL_GetTick();
+			manageTXRXState();
+		}
 
-	  if (HAL_GetTick() - lastTick > 1000)   // every 1 second
-	  {
-	      lastTick = HAL_GetTick();
-	      // Send data if not sending
-	      //CAN_SendSFFF(myData, 64);
-	      if (PQState == 0)
-	      {
-
-	      }
-	      else
-	      {
-	    	  retries++;
-	      }
-
-        	      //CAN_SendArray(myData, 32);
-//	      uint8_t packets[4][8] =
-//	         {
-//	             {0x10,0,0,0,0,0,0,1},
-//	             {0x20,0,0,0,0,0,0,2},
-//	             {0x30,0,0,0,0,0,0,3},
-//	             {0x40,0,0,0,0,0,0,4}
-//	         };
-//
-//	         for (int i = 0; i < 4; i++)
-//	         {
-//	             txHeader.StdId = 0x120 + i;
-//	             CAN_Send(packets[i], 8);
-//	             HAL_Delay(5);
-//	         }
-
-	  }
-
-    /* USER CODE BEGIN 3 */
-  }
-  /* USER CODE END 3 */
+	/* USER CODE BEGIN 3 */
+	}
+	/* USER CODE END 3 */
 }
 
 /**
@@ -566,34 +561,74 @@ void HAL_RTC_AlarmAEventCallback(RTC_HandleTypeDef *hrtc) {
 void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
 {
     if (HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &rxHeader, canRX) == HAL_OK)
-        {
-    		HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_3); // RX activity LED
-            printf("CAN RX | ID: 0x%03lX | DLC: %d | DATA:",
-                   rxHeader.StdId,
-                   rxHeader.DLC);
+	{
+		HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_3); // RX activity LED
+		printf("CAN RX | ID: 0x%03lX | DLC: %d | DATA:",
+			   rxHeader.StdId,
+			   rxHeader.DLC);
 
-            for (uint8_t i = 0; i < rxHeader.DLC; i++)
-            {
-                printf(" %02X", canRX[i]);
-            }
+		for (uint8_t i = 0; i < rxHeader.DLC; i++)
+		{
+			printf(" %02X", canRX[i]);
+		}
 
-            printf("\r\n");
+		printf("\r\n");
 
-            if ((canRX[0] >> 4) == 1 || canRX[0] == 0x2F) // Should send control frame
-            {
-            	//call a can frame function
-            	uint8_t packet[8] = {0x30, 0x0F, 0x0A, 0x00, 0x00, 0x00, 0x00, 0x00};
-            	CAN_Send(packet, sizeof(packet)/sizeof(packet[0]));
-            }
-
-            if (canRX[0] >> 4 == 3) // Should send consecutive frame
-            {
-            	CAN_SendCF();
-            }
-        }
+		routeRX();
+	}
 }
 
 
+/*
+ * Determines what should be done from the synchronous code side.
+ * This should be run regularly (in the 1-10 Hz range) in main to manage the TX/RX states
+ */
+void manageTXRXState(void)
+{
+	// Send data if not sending
+	if (TXRXState == 0)
+	{
+		// Build test data
+		myTXDataLength = 32;
+		for(int i=0; i<32; i++)
+		{
+			myTXBuffer[i]=i;
+		}
+		// Send test data
+		//CAN_SendSFFF(myTXBuffer, myTXDataLength);
+	}
+	else if (TXRXState == 1)
+	{
+		retries++;
+		if (retries >= 10)
+		{
+			TXRXState = 0; // Allow PQ to retry send on next iteration
+		}
+	}
+	else if (TXRXState == 2)
+	{
+		// do nothing
+	}
+	else if (TXRXState == 3)
+	{
+		// do nothing
+	}
+	else if (TXRXState == 4)
+	{
+		printf("RX Buffer:");
+		for (uint16_t i = 0; i < myRXDataLength; i++)
+		{
+			printf(" i=%02d %02X,", i, myRXBuffer[i]);
+		}
+		printf("\n");
+		TXRXState = 0;
+	}
+}
+
+
+/*
+ * Safely sends (and prints to terminal) one CAN frame.
+ */
 uint8_t CAN_Send(uint8_t *data, uint8_t len)
 {
     if (len > 8) len = 8;
@@ -617,6 +652,225 @@ uint8_t CAN_Send(uint8_t *data, uint8_t len)
 }
 
 
+/*
+ * The entry-point for sending data via CAN ISO-TP.
+ * Decides automatically whether to send a SF or FF.
+ */
+void CAN_SendSFFF(uint8_t *data, uint16_t length)
+{
+	uint8_t packet[8] = {0};
+	myTXBufferIndex = 0;
+
+	// Single Frame (SF): up to 7 bytes payload
+	if (length <= 7)
+	{
+	    packet[0] = (0x0u << 4) | (uint8_t)(length & 0x0Fu);
+	    memcpy(&packet[1], data, length);
+	    CAN_Send(packet, 8);   // send full 8 bytes for consistent logging
+	    TXRXState = 0; // Code for not actively sending out data
+	    return;
+	}
+	// (End SF)
+
+	// First Frame (FF): 12 bit length -> 4095 byte data limit
+	if (length>4095){
+		// ERROR: Above the first frame memory limit, return an handle error
+		TXRXState = 0; // Code for not actively sending out data
+		return;
+
+	}
+
+	// PCI: First Frame (1) + 12-bit length
+	packet[0] = (0x1u << 4) | (uint8_t)((length >> 8) & 0x0Fu);
+    packet[1] = (uint8_t)(length & 0xFFu);
+
+    // First 6 data bytes go in bytes 2..7
+	memcpy(&packet[2], &data[0], 6);
+	myTXBufferIndex += 6;
+
+	CAN_Send(packet, 8);
+	TXRXState = 1; // Code for having sent FF
+	// IMPORTANT: Will send CFs after FC received from receiver board
+}
+
+
+/*
+ * Sends the next batch of CFs from the data.
+ * Note: ensure that the TXBuffer has not been modified since the FF or previous CF was sent.
+ */
+void CAN_SendCFs()
+{
+	if ((canRX[0] & 0xF0) != 0x30) return; // Did not receive FC frame. CAN_SendCF was called incorrectly
+	if (TXRXState != 1 && TXRXState != 2) return; // Doesn't have CFs to send.
+	// Determine 0=continue, 1=wait, 2=abort
+	uint8_t pcl = canRX[0] & 0x0F;
+	if (pcl == 1)
+	{
+		return;
+	}
+	else if (pcl != 0)
+	{
+		TXRXState = 0; // Abort data send process
+		return;
+	}
+	// If here, should continue sending bytes!
+	TXRXState = 2; // Code for actively sending CFs
+	// Parse send parameters
+	uint8_t numFrames = canRX[1];
+	uint8_t frameWait = canRX[2]; // Note this is technically incorrect ISO-TP, but okay for 10ms standard delay
+
+	uint8_t sn = 1;
+
+	for (uint8_t i = 0; i <= numFrames; i++) //  changed loop so data is sent when numframes is not equal to 0
+	{
+		printf("sending frame %d\r\n", i);
+		uint8_t packet[8] = {0};
+
+		// PCI: 2 then index
+		packet[0] = (0x2u << 4) | sn;
+		sn = (sn + 1) & 0x0F;
+		if (sn == 0) sn = 1;
+
+		// Prep next data bytes
+		uint16_t numRemaining = myTXDataLength - myTXBufferIndex;
+		uint8_t numSend = numRemaining > 7 ? 7 : numRemaining;
+		memcpy(&packet[1], &myTXBuffer[myTXBufferIndex], numSend);
+		myTXBufferIndex += numSend;
+
+		CAN_Send(packet, 8);
+
+		//HAL_Delay(frameWait); Our FCs will have no frame wait delay - they can arrive out of order!
+
+		if (myTXBufferIndex >= myTXDataLength)
+		{
+			TXRXState = 0; // Done sending data!
+			break;
+			// Note: this doesn't reset the dataIndex pointer.
+		}
+	}
+}
+
+
+/*
+ * Helper function that determines the expected shape of the next incoming CF bundle.
+ * Also determines (and stores in LSB) if at least 1 more CF bundle is required.
+ */
+void setCFsExpected(void)
+{
+	myCFsExpected = 0;
+	uint16_t bytes_expected = myRXDataLength - myRXBufferIndex;
+	uint16_t numCFs = (bytes_expected + 6) / 7; // Number of CFs needed (ceil division)
+	uint8_t numCFs_this_block = (numCFs > 15) ? 15 : numCFs; // Limit to current block (max 15)
+	for (uint8_t k = 1; k <= numCFs_this_block; k++) // Set bits 1–numCFs_this_block
+	{
+	    myCFsExpected |= (uint16_t)(1u << k);
+	}
+	if (numCFs > 15) // If more CFs are needed beyond this block, set LSB
+	{
+	    myCFsExpected |= 0x1; // now should = 0xFFFF
+	}
+}
+
+
+/*
+ * Takes action based on the RX frame type.
+ */
+void routeRX(void)
+{
+	// Get Frame Type
+	uint8_t frameType = canRX[0] >> 4;
+
+	if (frameType == 0)
+	{
+		// Case incoming frame is SF
+		myRXDataLength = canRX[0] & 0x0F;
+		memcpy(myRXBuffer, &canRX[1], myRXDataLength);
+		myRXBufferIndex = myRXDataLength;
+		// The data portion of the SF should be in myRXBuffer
+		// Consider validating that the SF has been digested properly here
+	}
+	else if (frameType == 1)
+	{
+		// Case incoming frame is FF
+		TXRXState = 3;
+		myRXDataLength = 0x0FFF & ((((uint16_t)canRX[0]) << 8) | (uint16_t)canRX[1]);
+		memcpy(myRXBuffer, &canRX[2], 6);
+		myRXBufferIndex = 6;
+		// The data portion of the FF should be in myRXBuffer (no action)
+		// Consider validating that the FF has been digested properly here
+		// Decide how much data to expect from the next CF dump
+		setCFsExpected();
+		// Send FC Frame
+		myCFsReceived = 0;
+		uint8_t packet[8] = {0x30, 0x0F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}; // requests 15 CFs
+		CAN_Send(packet, 8);
+	}
+	else if (frameType == 2)
+	{
+		// Case incoming frame is CF
+		if (TXRXState != 3)
+		{
+			return; // Should not be receiving CFs at the moment
+		}
+		// ID the CF
+		uint8_t CFsn = canRX[0] & 0x0F;
+		// Store in buffer in correct location
+		uint16_t write_index = myRXBufferIndex + 7u * (CFsn - 1);
+		if (write_index >= myRXDataLength)
+		{
+			return;
+		}
+		uint16_t bytes_remaining = myRXDataLength - write_index;
+		uint8_t bytes_to_copy = (bytes_remaining >= 7) ? 7 : (uint8_t)bytes_remaining;
+		memcpy(&myRXBuffer[write_index], &canRX[1], bytes_to_copy);
+		// Note received
+		myCFsReceived |= (uint16_t)(1u << CFsn);
+		// Check for message complete
+		if (myCFsReceived == myCFsExpected)
+		{
+			TXRXState = 4;
+		}
+		// if received all CFs, send FC Frame
+		else if (myCFsReceived == 0xFFFE && (myCFsExpected & 0x1)) // All received when highest 15 bits are 1
+		{
+			myRXBufferIndex += 105; // 105 = 15*7
+			// Decide how much data to expect from the next CF dump
+			setCFsExpected();
+			// Send CF
+			myCFsReceived = 0;
+			uint8_t packet[8] = {0x30, 0x0F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}; // requests 15 CFs
+			CAN_Send(packet, 8);
+		}
+	}
+	else if (frameType == 3)
+	{
+		// Case incoming message is FC
+		// Flag the FC
+		uint8_t FCflag = canRX[0] & 0x0F;
+		// Case by case
+		if (FCflag == 0)
+		{
+			// Case continue with CFs
+			CAN_SendCFs();
+		}
+		else if (FCflag == 1)
+		{
+			// Case wait
+			// do nothing. The state machine will use this for retry logic later
+		}
+		else if (FCflag == 2)
+		{
+			// Case abort
+			TXRXState = 0;
+		}
+	}
+}
+
+
+/*
+ * Old CAN Testing function incompatible with ISO-TP.
+ * Do not use.
+ */
 void CAN_SendArray(uint8_t *data, uint16_t length)
 {
     uint16_t index = 0;
@@ -634,95 +888,6 @@ void CAN_SendArray(uint8_t *data, uint16_t length)
 
         HAL_Delay(2);
     }
-}
-
-
-void CAN_SendSFFF(uint8_t *data, uint16_t length)
-{
-	txHeader.StdId = 0x210;
-	uint8_t packet[8] = {0};
-	dataIndex = 0;
-
-	// Single Frame (SF): up to 7 bytes payload
-	if (length <= 7)
-	{
-	    packet[0] = (0x0u << 4) | (uint8_t)(length & 0x0Fu);
-	    memcpy(&packet[1], data, length);
-	    CAN_Send(packet, 8);   // send full 8 bytes for consistent logging
-	    return;
-	}
-
-	// First Frame (FF): length must fit in 12 bits for classic ISO-TP normal addressing
-	if (length>4095){
-		// ERROR: Above the first frame memory limit, return an handle error
-		PQState = -1; // code for not actively sending out data
-		return;
-
-	}
-
-	// PCI: First Frame + 12-bit length
-	packet[0] = (0x1u << 4) | (uint8_t)((length >> 8) & 0x0Fu);
-    packet[1] = (uint8_t)(length & 0xFFu);
-
-    // First 6 data bytes go in bytes 2..7
-	memcpy(&packet[2], &data[0], 6);
-	dataIndex += 6;
-
-	CAN_Send(packet, 8);
-	PQState = 3; // Code for actively sending data
-	// IMPORTANT: Do NOT send CFs yet.
-	// Wait for FC from receiver; when FC arrives you’ll start streaming CF frames.
-}
-
-void CAN_SendCF()
-{
-	if ((canRX[0] & 0xF0) != 0x30) return; // not Flow Control
-	// Determine 0=continue, 1=wait, 2=abort
-	uint8_t pcl = canRX[0] & 0x0F;
-	if (pcl == 1)
-	{
-		return;
-	}
-	else if (pcl != 0)
-	{
-		PQState = 0; // Abort data send process
-		return;
-	}
-	// If here, should continue sending bytes!
-	// Parse send parameters
-	uint8_t numFrames = canRX[1];
-	uint8_t frameWait = canRX[2]; // Note this is technically incorrect ISO-TP, but okay for 10ms standard delay
-
-	uint8_t sn = 1;
-
-	for (uint8_t i = 0; i <= numFrames; i++) //  changed loop so data is sent when numframes is not equal to 0
-	{
-		printf("sending frame %d\r\n", i);
-		uint8_t packet[8] = {0};
-
-		// PCI: 2 then index
-		packet[0] = (0x2u << 4) | sn;
-		sn = (sn + 1) & 0x0F;
-		if (sn == 0) sn = 1;
-
-		// Next data bytes
-		uint16_t numRemaining = myDataLength - dataIndex;
-		uint8_t numSend = numRemaining > 7 ? 7 : numRemaining;
-		memcpy(&packet[1], &myData[dataIndex], numSend);
-		dataIndex += numSend; // increment data index
-
-		CAN_Send(packet, 8);
-
-		//HAL_Delay(frameWait);
-		if (dataIndex >= myDataLength)
-		{
-			break;
-			// Note: this doesn't reset the dataIndex pointer.
-		}
-	}
-
-
-
 }
 
 
