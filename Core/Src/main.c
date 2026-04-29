@@ -18,6 +18,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+//#include "isotp_functions.c"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -84,12 +85,12 @@ uint16_t			myCFsReceived; // this is used as a collection of boolean bits
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
-void manageTXRXState(void);
-uint8_t CAN_Send(uint8_t *data, uint8_t len);
-void CAN_SendSFFF(uint8_t *data, uint16_t length);
-void CAN_SendCFs();
-void setCFsExpected(void);
-void routeRX(void);
+void manageTXRXState(void);						//--+
+uint8_t CAN_Send(uint8_t *data, uint8_t len);		//	|
+void CAN_SendSFFF(uint8_t *data, uint16_t length);//	+-- These are handled by the import now.
+void CAN_SendCFs();								//	|
+void setCFsExpected(void);						//	|
+void routeRX(void);								//--+
 void CAN_SendArray(uint8_t *data, uint16_t length);
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
